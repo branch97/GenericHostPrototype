@@ -4,26 +4,17 @@ using Microsoft.Extensions.Logging;
 /// <summary>
 /// Background service that processes work items from the IBackgroundTaskQueue.
 /// </summary>
-public class QueuedHostedService : BackgroundService
+public class QueuedHostedService(
+    IBackgroundTaskQueue taskQueue,
+    ILogger<QueuedHostedService> logger) : BackgroundService
 {
-    private readonly ILogger<QueuedHostedService> _logger;
-    private readonly IBackgroundTaskQueue _taskQueue;
-
-    public QueuedHostedService(
-        IBackgroundTaskQueue taskQueue,
-        ILogger<QueuedHostedService> logger)
-    {
-        _taskQueue = taskQueue;
-        _logger = logger;
-    }
-
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation("Queued Hosted Service is starting.");
+        logger.LogInformation("Queued Hosted Service is starting.");
 
         while (!stoppingToken.IsCancellationRequested)
         {
-            var workItem = await _taskQueue.DequeueAsync(stoppingToken);
+            var workItem = await taskQueue.DequeueAsync(stoppingToken);
 
             try
             {
@@ -31,10 +22,10 @@ public class QueuedHostedService : BackgroundService
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error occurred executing task work item.");
+                logger.LogError(ex, "Error occurred executing task work item.");
             }
         }
 
-        _logger.LogInformation("Queued Hosted Service is stopping.");
+        logger.LogInformation("Queued Hosted Service is stopping.");
     }
 }

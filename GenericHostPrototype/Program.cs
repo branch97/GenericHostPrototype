@@ -111,6 +111,15 @@ if (builder.Environment.IsDevelopment())
     var queue = host.Services.GetRequiredService<IBackgroundTaskQueue>();
     var logger = host.Services.GetRequiredService<ILogger<Program>>();
 
+    // Example: Call health check manually in development
+    var healthCheckService = host.Services.GetRequiredService<Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckService>();
+    var healthReport = await healthCheckService.CheckHealthAsync();
+    logger.LogInformation("Manual health check status: {Status}", healthReport.Status);
+    foreach (var entry in healthReport.Entries)
+    {
+        logger.LogInformation("Health check '{Name}': {Status}", entry.Key, entry.Value.Status);
+    }
+
     _ = Task.Run(async () =>
     {
         await Task.Delay(2000);

@@ -1,11 +1,7 @@
-using System;
-using System.Threading.Tasks;
-using GenericHostPrototype;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Moq;
-using Xunit;
 
 public class SystemHealthCheckTests
 {

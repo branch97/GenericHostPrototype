@@ -6,17 +6,10 @@ using System.Diagnostics;
 /// <summary>
 /// Health check that reports on system memory usage and uptime, configurable via options.
 /// </summary>
-public class SystemHealthCheck : IHealthCheck
+public class SystemHealthCheck(
+    IOptions<SystemHealthOptions> options, 
+    ILogger<SystemHealthCheck> logger) : IHealthCheck
 {
-    private readonly SystemHealthOptions _options;
-    private readonly ILogger<SystemHealthCheck> _logger;
-
-    public SystemHealthCheck(IOptions<SystemHealthOptions> options, ILogger<SystemHealthCheck> logger)
-    {
-        _options = options.Value;
-        _logger = logger;
-    }
-
     public Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default)
     {
         try
@@ -26,8 +19,8 @@ public class SystemHealthCheck : IHealthCheck
             var processorCount = Environment.ProcessorCount;
             var uptimeMinutes = (DateTime.Now - Process.GetCurrentProcess().StartTime).TotalMinutes;
 
-            var isHealthy = memoryUsage < _options.MaxMemoryThreshold &&
-                          uptimeMinutes < _options.MaxUptimeMinutes;
+            var isHealthy = memoryUsage < options.Value.MaxMemoryThreshold &&
+                          uptimeMinutes < options.Value.MaxUptimeMinutes;
 
             var data = new Dictionary<string, object>
             {
@@ -38,16 +31,16 @@ public class SystemHealthCheck : IHealthCheck
 
             if (isHealthy)
             {
-                _logger.LogInformation("System is healthy. Memory: {Memory} bytes", memoryUsage);
+                logger.LogInformation("System is healthy. Memory: {Memory} bytes", memoryUsage);
                 return Task.FromResult(HealthCheckResult.Healthy("System is healthy", data));
             }
 
-            _logger.LogWarning("System health check failed. Memory: {Memory} bytes", memoryUsage);
+            logger.LogWarning("System health check failed. Memory: {Memory} bytes", memoryUsage);
             return Task.FromResult(HealthCheckResult.Unhealthy("System exceeds health thresholds", null, data));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error performing health check");
+            logger.LogError(ex, "Error performing health check");
             return Task.FromResult(HealthCheckResult.Unhealthy("Health check failed", ex));
         }
     }
