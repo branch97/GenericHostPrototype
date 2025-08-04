@@ -1,6 +1,10 @@
 ﻿using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
+/// <summary>
+/// Demonstrates the full lifecycle of a hosted service using IHostedLifecycleService.
+/// Logs each lifecycle event for observability.
+/// </summary>
 public class HostedLifecycleService : IHostedService, IHostedLifecycleService
 {
     private readonly ILogger _logger;
@@ -11,6 +15,7 @@ public class HostedLifecycleService : IHostedService, IHostedLifecycleService
     {
         _logger = logger;
 
+        // Register for application lifetime events
         appLifetime.ApplicationStarted.Register(OnStarted);
         appLifetime.ApplicationStopping.Register(OnStopping);
         appLifetime.ApplicationStopped.Register(OnStopped);
@@ -19,21 +24,18 @@ public class HostedLifecycleService : IHostedService, IHostedLifecycleService
     Task IHostedLifecycleService.StartingAsync(CancellationToken cancellationToken)
     {
         _logger.LogInformation("1. StartingAsync has been called.");
-
         return Task.CompletedTask;
     }
 
     Task IHostedService.StartAsync(CancellationToken cancellationToken)
     {
         _logger.LogInformation("2. StartAsync has been called.");
-
         return Task.CompletedTask;
     }
 
     Task IHostedLifecycleService.StartedAsync(CancellationToken cancellationToken)
     {
         _logger.LogInformation("3. StartedAsync has been called.");
-
         return Task.CompletedTask;
     }
 
@@ -50,21 +52,18 @@ public class HostedLifecycleService : IHostedService, IHostedLifecycleService
     Task IHostedLifecycleService.StoppingAsync(CancellationToken cancellationToken)
     {
         _logger.LogInformation("6. StoppingAsync has been called.");
-
         return Task.CompletedTask;
     }
 
     Task IHostedService.StopAsync(CancellationToken cancellationToken)
     {
         _logger.LogInformation("7. StopAsync has been called.");
-
         return Task.CompletedTask;
     }
 
     Task IHostedLifecycleService.StoppedAsync(CancellationToken cancellationToken)
     {
         _logger.LogInformation("8. StoppedAsync has been called.");
-
         return Task.CompletedTask;
     }
 

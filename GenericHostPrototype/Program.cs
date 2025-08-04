@@ -3,62 +3,137 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
-// Create a generic host builder with default configuration, dependency injection, and logging support.
-// This initializes the application's hosting environment and services.
+// ------------------------------------------------------------
+// GenericHostPrototype: A .NET 10 Console App Demoing Generic Host
+// ------------------------------------------------------------
+// Features:
+// - Dependency Injection
+// - Logging
+// - Configuration Providers (JSON, env, user secrets)
+// - App Lifecycle & Hosted Services
+// - Health Checks
+// - Background Task Queue
+// - Environment-specific config & behavior
+// ------------------------------------------------------------
+
 var builder = Host.CreateApplicationBuilder(args);
 
 // -------------------------
 // Configure Environment
 // -------------------------
-// Set the application name and environment explicitly.
-// This can influence configuration loading, logging, and other environment-specific behaviors.
+// Note: Environment is automatically set from DOTNET_ENVIRONMENT variable
+// or defaults to "Production" if not specified
 builder.Environment.ApplicationName = "GenericHostPrototype";
-builder.Environment.EnvironmentName = "Development";
 
 // -------------------------
 // Add Configuration Sources
 // -------------------------
-// Load configuration settings from JSON file and environment variables.
-// - appsettings.json is optional and reloads on change (useful for dynamic configuration).
-// - Environment variables allow overriding or providing configuration externally.
 builder.Configuration
-    .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
-    .AddEnvironmentVariables();
+    .SetBasePath(Directory.GetCurrentDirectory())
+    .AddJsonFile("Config/appsettings.json", optional: true, reloadOnChange: true)
+    // Environment-specific config file
+    .AddJsonFile($"Config/appsettings.{builder.Environment.EnvironmentName}.json", optional: true, reloadOnChange: true)
+    // User secrets in Development only
+    .AddUserSecrets<Program>(optional: true)
+    .AddEnvironmentVariables()
+    .AddCommandLine(args);
 
 // -------------------------
-// Configure Logging
+// Configure Environment-Specific Services
 // -------------------------
-// Clear default logging providers and add specific ones:
-// - Console logger for standard output.
-// - Debug logger for debug output during development.
-// Also apply a filter to only log warnings and above from "Microsoft.Hosting.Lifetime" category to reduce noise.
+if (builder.Environment.IsDevelopment())
+{
+    // Development-only services
+    builder.Logging
+        .AddDebug()
+        .SetMinimumLevel(LogLevel.Debug);
+}
+else
+{
+    // Production/Staging logging
+    builder.Logging
+        .SetMinimumLevel(LogLevel.Information)
+        .AddFilter("Microsoft", LogLevel.Warning);
+}
+
+// -------------------------
+// Configure Logging (Common)
+// -------------------------
 builder.Logging
     .ClearProviders()
     .AddConsole()
-    .AddDebug()
     .AddFilter("Microsoft.Hosting.Lifetime", LogLevel.Warning);
+
+// -------------------------
+// Configure Host Options
+// -------------------------
+builder.Services.Configure<HostOptions>(builder.Configuration.GetSection("HostOptions"));
+builder.Services.Configure<SystemHealthOptions>(builder.Configuration.GetSection("SystemHealth"));
 
 // -------------------------
 // Register Dependencies and Services
 // -------------------------
-// Register application services with dependency injection container:
-// - IMyWorkerService implemented by MyWorkerService as a singleton (single instance for app lifetime).
-// - HostedLifecycleService as a hosted background service that runs with the host lifecycle.
 builder.Services
-    .AddSingleton<IMyWorkerService, MyWorkerService>()
-    .AddHostedService<HostedLifecycleService>();
+    .AddSingleton<IBackgroundTaskQueue>(_ => new BackgroundTaskQueue(
+        // Larger queue size in production
+        builder.Environment.IsProduction() ? 1000 : 100
+    ))
+    .AddHostedService<HostedLifecycleService>()
+    .AddHostedService<QueuedHostedService>();
 
 // -------------------------
-// Add Metrics Services
+// Add Health Checks
 // -------------------------
-// Register metrics-related services using the builder's Metrics extension.
-// This enables metrics collection and reporting capabilities for monitoring the application.
-builder.Metrics.Services.AddMetrics();
+var healthChecks = builder.Services.AddHealthChecks();
+
+// Add system health check with environment-specific thresholds
+if (builder.Environment.IsDevelopment())
+{
+    healthChecks.AddCheck<SystemHealthCheck>("system_health_check",
+        tags: new[] { "ready" },
+        timeout: TimeSpan.FromSeconds(3));
+}
+else
+{
+    healthChecks.AddCheck<SystemHealthCheck>("system_health_check",
+        tags: new[] { "ready" },
+        timeout: TimeSpan.FromSeconds(1));
+}
 
 // -------------------------
 // Build and Run Host
 // -------------------------
-// Build the configured host instance and start it asynchronously.
-// This runs the application and keeps it alive until shutdown is requested.
 var host = builder.Build();
-await host.RunAsync();
+
+// Queue example work (only in Development)
+if (builder.Environment.IsDevelopment())
+{
+    var queue = host.Services.GetRequiredService<IBackgroundTaskQueue>();
+    var logger = host.Services.GetRequiredService<ILogger<Program>>();
+
+    _ = Task.Run(async () =>
+    {
+        await Task.Delay(2000);
+        await queue.QueueWorkItemAsync(async token =>
+        {
+            logger.LogInformation("Starting background work item");
+            await Task.Delay(5000, token);
+            logger.LogInformation("Completed background work item");
+        });
+    });
+}
+
+try
+{
+    var logger = host.Services.GetRequiredService<ILogger<Program>>();
+    logger.LogInformation("Starting application in {Environment} environment",
+        builder.Environment.EnvironmentName);
+    
+    await host.RunAsync();
+}
+catch (Exception ex)
+{
+    var logger = host.Services.GetRequiredService<ILogger<Program>>();
+    logger.LogError(ex, "Host terminated unexpectedly");
+    throw;
+}
